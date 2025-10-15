@@ -437,6 +437,11 @@ function attachRevealingFieldListeners(parentElement) {
         };
 
         btn.onclick = (e) => {
+            if (revealTimers.has(fieldId)) {
+                clearTimeout(revealTimers.get(fieldId));
+                revealTimers.delete(fieldId);
+            }
+
             const isMasked = valueSpan.textContent === '••••••••';
             if (isMasked) {
                 const encryptedValue = valueSpan.dataset.encryptedValue;
@@ -713,15 +718,17 @@ async function handleChangeMasterKey(event) {
     }
 
     setLoading(true, DOMElements.changeMasterKeyConfirmBtn);
-    showStatus('Verificando clave actual y re-encriptando datos...');
+
+    // Correct validation against the in-memory master key
+    if (currentKey !== masterKey) {
+        showStatus('La clave maestra actual es incorrecta.', 'error');
+        setLoading(false, DOMElements.changeMasterKeyConfirmBtn);
+        return;
+    }
+    
+    showStatus('Re-encriptando datos...');
 
     try {
-        // Verify current key by trying to decrypt something.
-        const firstKey = dbData.keys[0];
-        if (firstKey && CryptoService.decrypt(firstKey.name, currentKey) === '') {
-             throw new Error("La clave maestra actual es incorrecta.");
-        }
-        
         // Re-encrypt all data with the new key
         dbData.keys.forEach(key => {
             key.user = CryptoService.encrypt(CryptoService.decrypt(key.user, currentKey), newKey);
@@ -751,6 +758,8 @@ async function handleChangeMasterKey(event) {
         renderKeys(); // Re-render to ensure all listeners use the new master key
     } catch (e) {
         showStatus(`Error al cambiar la clave: ${e.message}`, 'error');
+        // IMPORTANT: If re-encryption fails, revert the master key to avoid a locked state.
+        masterKey = currentKey;
     } finally {
         setLoading(false, DOMElements.changeMasterKeyConfirmBtn);
     }
@@ -762,6 +771,9 @@ function resetKeyForm() {
     DOMElements.keyIdInput.value = '';
     DOMElements.keyFormTitle.textContent = 'Añadir llave nueva';
     DOMElements.cancelEditBtn.classList.add('hidden');
+    // Ensure inputs are not password type on reset
+    DOMElements.keyUserInput.type = 'text';
+    DOMElements.keyPassInput.type = 'password';
     renderTagSelector([]);
     updatePasswordStrengthUI('', DOMElements.passwordStrengthIndicator, DOMElements.keyPassInput);
     toggleWiFiFormMode(false); // Ensure WiFi mode is off
@@ -780,6 +792,8 @@ function populateEditForm(keyId) {
         DOMElements.keyIdInput.value = key.id;
         DOMElements.keyNameInput.value = key.name;
         // Decrypt only when populating the edit form
+        DOMElements.keyUserInput.type = 'text';
+        DOMElements.keyPassInput.type = 'password';
         DOMElements.keyUserInput.value = CryptoService.decrypt(key.user, masterKey);
         DOMElements.keyPassInput.value = CryptoService.decrypt(key.pass, masterKey);
         DOMElements.keyUrlInput.value = CryptoService.decrypt(key.url, masterKey);
@@ -1671,6 +1685,7 @@ document.addEventListener('DOMContentLoaded', () => {
     DOMElements.changeMasterKeyBtn.addEventListener('click', () => {
         DOMElements.dbManagementDropdown.classList.add('hidden');
         DOMElements.changeMasterKeyModal.classList.remove('hidden');
+        DOMElements.currentMasterKeyInput.focus();
     });
     DOMElements.changeMasterKeyForm.addEventListener('submit', handleChangeMasterKey);
     DOMElements.newMasterKeyInput.addEventListener('input', e => updatePasswordStrengthUI(e.target.value, DOMElements.newPasswordStrengthIndicator, DOMElements.newMasterKeyInput));
@@ -1723,28 +1738,42 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // --- Password visibility toggles ---
+    // --- Password visibility toggles with auto-hide ---
     DOMElements.keyPassInput.addEventListener('input', e => updatePasswordStrengthUI(e.target.value, DOMElements.passwordStrengthIndicator, DOMElements.keyPassInput));
     
     document.querySelectorAll('[data-toggle-password]').forEach(btn => {
         const input = document.getElementById(btn.dataset.togglePassword);
         btn.innerHTML = ICONS.eye; // Set initial icon
         btn.addEventListener('click', () => {
-            if(input.type === 'password') {
+            const inputId = input.id;
+
+            // Clear any existing timer for this input
+            if (revealTimers.has(inputId)) {
+                clearTimeout(revealTimers.get(inputId));
+                revealTimers.delete(inputId);
+            }
+            
+            if (input.type === 'password') {
                 input.type = 'text';
                 btn.innerHTML = ICONS.eyeOff;
+
+                // Set a timer to hide it again
+                const timerId = setTimeout(() => {
+                    if (document.getElementById(inputId)) { // Check if element still exists
+                        input.type = 'password';
+                        btn.innerHTML = ICONS.eye;
+                    }
+                    revealTimers.delete(inputId);
+                }, REVEAL_TIMEOUT);
+                revealTimers.set(inputId, timerId);
             } else {
+                // If it's already visible, clicking the button should hide it immediately
                 input.type = 'password';
                 btn.innerHTML = ICONS.eye;
             }
         });
     });
 
-    [DOMElements.keyUserInput, DOMElements.keyPassInput].forEach(input => {
-        input.addEventListener('focus', () => input.type = 'text');
-        input.addEventListener('blur', () => input.type = 'password');
-    });
-    
     // --- View Toggle (List/Card) ---
     function updateViewToggleBtn(view) {
         DOMElements.viewToggleBtn.innerHTML = view === 'list' ? ICONS.grid : ICONS.list;
