@@ -6,6 +6,8 @@ const BIO_STORAGE_KEY = 'rdk_biometric_data';
 const BIO_ENCRYPTION_KEY = 'a-not-so-secret-key-for-local-encryption'; // Used only to obfuscate master key in localStorage
 const MAX_TAGS_PER_KEY = 3;
 const WIFI_QR_TAG_NAME = 'WiFiQR';
+const REVEAL_TIMEOUT = 3000; // 3 seconds
+const COLLAPSE_TIMEOUT = 5000; // 5 seconds
 
 // --- SVG ICONS ---
 const ICONS = {
@@ -368,7 +370,25 @@ function createKeyListItem(key) {
                 ${wifiButtonHtml}
             </div>
         </div></div>`;
-    item.querySelector('.key-item-header').onclick = () => item.classList.toggle('expanded');
+
+    item.querySelector('.key-item-header').addEventListener('click', () => {
+        const isExpanded = item.classList.contains('expanded');
+        
+        // Clear any pending collapse timer if the user interacts manually
+        if (item.autoCollapseTimer) {
+            clearTimeout(item.autoCollapseTimer);
+        }
+
+        item.classList.toggle('expanded');
+
+        // If we are in card view and the item is now expanded, set a timer to collapse it
+        if (currentView === 'card' && !isExpanded) {
+            item.autoCollapseTimer = setTimeout(() => {
+                item.classList.remove('expanded');
+            }, COLLAPSE_TIMEOUT);
+        }
+    });
+
     item.querySelector('.edit-btn').onclick = () => populateEditForm(key.id);
     item.querySelector('.delete-btn').onclick = () => handleDeleteKey(key.id);
     if(isWifiKey) {
@@ -420,18 +440,31 @@ function createRevealingFieldHTML(label, encryptedValue, isMono = false) {
 }
 
 function attachRevealingFieldListeners(parentElement) {
-    parentElement.querySelectorAll('.reveal-btn').forEach(btn => btn.onclick = (e) => {
-        const valueSpan = e.currentTarget.closest('div').parentElement.querySelector('.value-span');
-        const isMasked = valueSpan.textContent === '••••••••';
-        if (isMasked) {
-            const encryptedValue = valueSpan.dataset.encryptedValue;
-            const decryptedValue = CryptoService.decrypt(encryptedValue, masterKey);
-            valueSpan.textContent = decryptedValue || '[Error al descifrar]';
-        } else {
-            valueSpan.textContent = '••••••••';
-        }
-        e.currentTarget.innerHTML = isMasked ? ICONS.eyeOff : ICONS.eye;
+    parentElement.querySelectorAll('.reveal-btn').forEach(btn => {
+        const valueSpan = btn.closest('.flex').parentElement.querySelector('.value-span');
+        
+        const toggleVisibility = () => {
+            if (valueSpan.autoHideTimer) {
+                clearTimeout(valueSpan.autoHideTimer);
+                valueSpan.autoHideTimer = null;
+            }
+            
+            const isMasked = valueSpan.textContent === '••••••••';
+            if (isMasked) {
+                const encryptedValue = valueSpan.dataset.encryptedValue;
+                const decryptedValue = CryptoService.decrypt(encryptedValue, masterKey);
+                valueSpan.textContent = decryptedValue || '[Error al descifrar]';
+                btn.innerHTML = ICONS.eyeOff;
+                // Set timer to auto-hide
+                valueSpan.autoHideTimer = setTimeout(toggleVisibility, REVEAL_TIMEOUT);
+            } else {
+                valueSpan.textContent = '••••••••';
+                btn.innerHTML = ICONS.eye;
+            }
+        };
+        btn.addEventListener('click', toggleVisibility);
     });
+
     parentElement.querySelectorAll('.copy-btn').forEach(btn => btn.onclick = (e) => {
         const valueSpan = e.currentTarget.closest('div').parentElement.querySelector('.value-span');
         const encryptedValue = valueSpan.dataset.encryptedValue;
@@ -650,6 +683,59 @@ async function handleRenameDb(event) {
         saveSessionState();
     } catch(e) { showStatus(`Error al renombrar: ${e.message}`, 'error'); }
     finally { setLoading(false, DOMElements.renameConfirmBtn); }
+}
+
+async function handleChangeMasterKey(event) {
+    event.preventDefault();
+    const currentKey = DOMElements.currentMasterKeyInput.value;
+    const newKey = DOMElements.newMasterKeyInput.value;
+    const confirmKey = DOMElements.confirmMasterKeyInput.value;
+
+    if (!currentKey || !newKey || !confirmKey) {
+        return showToast('Todos los campos son requeridos.', 'info');
+    }
+    if (newKey !== confirmKey) {
+        return showToast('Las nuevas claves no coinciden.', 'info');
+    }
+    if (newKey.length < 4) { // Basic validation
+        return showToast('La nueva clave es muy corta.', 'info');
+    }
+
+    // Verify current master key by trying to decrypt something.
+    // We can just try decrypting the whole db object back to a valid object.
+    const reDecrypted = CryptoService.decrypt(CryptoService.encrypt(JSON.stringify(dbData), masterKey), currentKey);
+    if (!reDecrypted) {
+         return showToast('La clave maestra actual es incorrecta.', 'info');
+    }
+
+    setLoading(true, DOMElements.changeMasterKeyConfirmBtn);
+    try {
+        // Re-encrypt the entire DB with the new key
+        const encryptedContent = CryptoService.encrypt(JSON.stringify(dbData), newKey);
+        await GDriveService.updateFileContent(dbFileId, encryptedContent);
+        
+        // Update the master key in the current session
+        masterKey = newKey;
+        
+        // Update biometric data with the new encrypted master key
+        const bioData = getBiometricData();
+        if (bioData[dbFileId]) {
+            bioData[dbFileId].forEach(cred => {
+                cred.encryptedMasterKey = CryptoService.encrypt(newKey, BIO_ENCRYPTION_KEY);
+            });
+            saveBiometricData(bioData);
+        }
+
+        DOMElements.changeMasterKeyModal.classList.add('hidden');
+        DOMElements.changeMasterKeyForm.reset();
+        saveSessionState(); // Save the new state
+        showStatus('Clave maestra cambiada con éxito.', 'ok');
+        
+    } catch (e) {
+        showStatus(`Error al cambiar la clave: ${e.message}`, 'error');
+    } finally {
+        setLoading(false, DOMElements.changeMasterKeyConfirmBtn);
+    }
 }
 
 async function handleDeleteDb() {
@@ -1444,6 +1530,7 @@ document.addEventListener('DOMContentLoaded', () => {
         dbManagementBtn: document.getElementById('db-management-btn'),
         dbManagementDropdown: document.getElementById('db-management-dropdown'),
         renameDbBtn: document.getElementById('rename-db-btn'),
+        changeMasterKeyBtn: document.getElementById('change-master-key-btn'),
         deleteDbBtn: document.getElementById('delete-db-btn'),
         searchInput: document.getElementById('search-input'),
         toastContainer: document.getElementById('toast-container'),
@@ -1459,6 +1546,12 @@ document.addEventListener('DOMContentLoaded', () => {
         renameDbForm: document.getElementById('rename-db-form'),
         renameDbInput: document.getElementById('rename-db-input'),
         renameConfirmBtn: document.getElementById('rename-confirm-btn'),
+        changeMasterKeyModal: document.getElementById('change-master-key-modal'),
+        changeMasterKeyForm: document.getElementById('change-master-key-form'),
+        currentMasterKeyInput: document.getElementById('current-master-key-input'),
+        newMasterKeyInput: document.getElementById('new-master-key-input'),
+        confirmMasterKeyInput: document.getElementById('confirm-master-key-input'),
+        changeMasterKeyConfirmBtn: document.getElementById('change-master-key-confirm-btn'),
         deleteDbModal: document.getElementById('delete-db-modal'),
         deleteDbName: document.getElementById('delete-db-name'),
         deleteConfirmBtn: document.getElementById('delete-confirm-btn'),
@@ -1573,6 +1666,13 @@ document.addEventListener('DOMContentLoaded', () => {
         DOMElements.renameDbModal.classList.remove('hidden');
     });
     DOMElements.renameDbForm.addEventListener('submit', handleRenameDb);
+
+    DOMElements.changeMasterKeyBtn.addEventListener('click', () => {
+        DOMElements.dbManagementDropdown.classList.add('hidden');
+        DOMElements.changeMasterKeyModal.classList.remove('hidden');
+    });
+    DOMElements.changeMasterKeyForm.addEventListener('submit', handleChangeMasterKey);
+
     DOMElements.deleteDbBtn.addEventListener('click', () => {
         DOMElements.dbManagementDropdown.classList.add('hidden');
         DOMElements.deleteDbName.textContent = currentDbName;
