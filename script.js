@@ -437,9 +437,10 @@ function attachRevealingFieldListeners(parentElement) {
         };
 
         btn.onclick = (e) => {
+            e.stopPropagation(); // Prevent card from expanding/collapsing
             if (revealTimers.has(fieldId)) {
-                clearTimeout(revealTimers.get(fieldId));
-                revealTimers.delete(fieldId);
+                hideField(); // If clicked again while revealed, hide immediately
+                return;
             }
 
             const isMasked = valueSpan.textContent === '••••••••';
@@ -452,13 +453,12 @@ function attachRevealingFieldListeners(parentElement) {
                 // Set a timer to auto-hide
                 const timerId = setTimeout(hideField, REVEAL_TIMEOUT);
                 revealTimers.set(fieldId, timerId);
-            } else {
-                hideField(); // Manually hide and clear timer
             }
         };
     });
 
     parentElement.querySelectorAll('.copy-btn').forEach(btn => btn.onclick = (e) => {
+        e.stopPropagation(); // Prevent card from expanding/collapsing
         const valueSpan = e.currentTarget.closest('div').parentElement.querySelector('.value-span');
         const encryptedValue = valueSpan.dataset.encryptedValue;
         const decryptedValue = CryptoService.decrypt(encryptedValue, masterKey);
@@ -1747,10 +1747,13 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', () => {
             const inputId = input.id;
 
-            // Clear any existing timer for this input
+            // If a timer is already running for this input, clicking the button again should just hide it.
             if (revealTimers.has(inputId)) {
                 clearTimeout(revealTimers.get(inputId));
                 revealTimers.delete(inputId);
+                input.type = 'password';
+                btn.innerHTML = ICONS.eye;
+                return;
             }
             
             if (input.type === 'password') {
@@ -1766,10 +1769,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     revealTimers.delete(inputId);
                 }, REVEAL_TIMEOUT);
                 revealTimers.set(inputId, timerId);
-            } else {
-                // If it's already visible, clicking the button should hide it immediately
-                input.type = 'password';
-                btn.innerHTML = ICONS.eye;
             }
         });
     });
