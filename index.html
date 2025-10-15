@@ -118,8 +118,8 @@
                                             Cambiar Nombre
                                         </button>
                                         <button id="change-master-key-btn" class="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700">
-                                          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" /></svg>
-                                          Cambiar Clave Maestra
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" /></svg>
+                                            Cambiar Clave Maestra
                                         </button>
                                         <button id="delete-db-btn" class="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -386,20 +386,29 @@
         </form>
     </div>
   </div>
-
+  
   <div id="change-master-key-modal" class="modal-container hidden">
       <div class="modal-content" role="dialog" aria-modal="true">
           <h3 class="text-lg font-bold mb-4">Cambiar Clave Maestra</h3>
-          <p class="text-sm text-slate-600 dark:text-slate-400 mb-4">
-              Se volverá a cifrar todo el llavero. Esta acción también actualizará las credenciales biométricas guardadas en este dispositivo.
-          </p>
           <form id="change-master-key-form" class="space-y-4">
-              <input id="current-master-key-input" type="password" placeholder="Clave Maestra Actual" class="w-full p-2 border border-slate-300 rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-slate-200 dark:placeholder-slate-400" required />
-              <input id="new-master-key-input" type="password" placeholder="Nueva Clave Maestra" class="w-full p-2 border border-slate-300 rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-slate-200 dark:placeholder-slate-400" required />
-              <input id="confirm-master-key-input" type="password" placeholder="Confirmar Nueva Clave Maestra" class="w-full p-2 border border-slate-300 rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-slate-200 dark:placeholder-slate-400" required />
+              <div>
+                  <label for="current-master-key-input" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Clave Maestra Actual</label>
+                  <input id="current-master-key-input" type="password" class="mt-1 w-full p-2 border border-slate-300 rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-slate-200 dark:placeholder-slate-400" required />
+              </div>
+              <div>
+                  <label for="new-master-key-input" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Nueva Clave Maestra</label>
+                   <div class="relative">
+                      <input id="new-master-key-input" type="password" class="mt-1 w-full p-2 border border-slate-300 rounded-md pr-8 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-200" required />
+                      <span id="new-password-strength-indicator" class="absolute inset-y-0 right-0 pr-3 flex items-center text-xl" aria-live="polite"></span>
+                   </div>
+              </div>
+               <div>
+                  <label for="confirm-master-key-input" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Confirmar Nueva Clave</label>
+                  <input id="confirm-master-key-input" type="password" class="mt-1 w-full p-2 border border-slate-300 rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-slate-200" required />
+              </div>
               <div class="flex gap-2">
                   <button type="button" class="modal-cancel-btn w-full bg-slate-200 hover:bg-slate-300 text-slate-800 py-2 px-4 rounded-md dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-200">Cancelar</button>
-                  <button type="submit" id="change-master-key-confirm-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Cambiar Clave</button>
+                  <button type="submit" id="change-master-key-confirm-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md disabled:bg-slate-400">Guardar</button>
               </div>
           </form>
       </div>
